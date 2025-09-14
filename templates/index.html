@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MD/HTML Oluşturucu</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.2/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .btn-custom {
+            background-color: #6C4A3F;
+            color: white;
+            border-color: #6C4A3F;
+        }
+        .btn-custom:hover {
+            background-color: #583e35; /* Darker shade for hover */
+            border-color: #583e35;
+        }
+        .btn-custom:active {
+            transform: none;
+        }
+
+        .main-input-group {
+            width: 100%;
+            max-width: 48rem; /* 768px */
+        }
+
+        html, body {
+            height: 100%;
+        }
+        html {
+            /* Reserve scrollbar space to avoid layout shift on toggle */
+            scrollbar-gutter: stable both-edges;
+        }
+        body {
+            /* A warm, pleasant beige background */
+            background-color: #EFEBE4; 
+            /* A dark, earthy brown for text to ensure good contrast */
+            color: #4F4A45;
+            /* Prevent scroll chaining to reduce subtle bounce/jitter */
+            overscroll-behavior-y: none;
+        }
+
+        /* Sidebar Styles */
+        #sidebar {
+            width: 300px;
+            background-color: #F5F1EB;
+            border-right: 1px solid #D4D1CC;
+            transition: transform 0.3s ease-in-out;
+            overflow: hidden;
+        }
+        
+        #sidebar.collapsed {
+            transform: translateX(-100%);
+        }
+        
+
+        
+        #main-content {
+            flex: 1;
+            margin-left: 0;
+            transition: margin-left 0.3s ease-in-out;
+        }
+        
+        #sidebar.collapsed + #main-content {
+            margin-left: -300px;
+        }
+        
+        .chat-item {
+            cursor: pointer;
+            padding: 12px;
+            margin: 4px 8px;
+            border-radius: 10px;
+            border: 1px solid #E8E6E3;
+            background-color: #FAFAF9;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+        }
+        
+        .chat-item:hover {
+            background-color: #E8E5DF;
+            border-color: #D4D1CC;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        }
+        
+        .chat-item.active {
+            background-color: #6C4A3F;
+            color: white;
+            border-color: #6C4A3F;
+            box-shadow: 0 2px 8px rgba(108, 74, 63, 0.2);
+        }
+        
+        .chat-item.active:hover {
+            background-color: #583e35;
+            border-color: #583e35;
+            box-shadow: 0 3px 10px rgba(108, 74, 63, 0.3);
+        }
+        
+        .chat-question {
+            font-weight: 500;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+        }
+        
+        .chat-date {
+            font-size: 0.75rem;
+            opacity: 0.7;
+        }
+        
+        .delete-chat {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            background-color: #dc2626;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+        
+        .chat-item:hover .delete-chat {
+            opacity: 1;
+        }
+        
+        .delete-chat:hover {
+            background-color: #b91c1c;
+        }
+
+
+
+        #app-wrapper {
+            transition: padding 0.5s ease-in-out;
+        }
+        #main-title, #main-subtitle {
+            transition: all 0.4s ease-in-out;
+        }
+        #input-wrapper {
+            transition: all 0.5s ease-in-out;
+        }
+        #input-container {
+             transition: all 0.5s ease-in-out;
+        }
+
+        /* Initial State Styling */
+        #app-wrapper.initial {
+            justify-content: center;
+        }
+        #app-wrapper.initial #input-container {
+            /* The width is now controlled by the child .main-input-group class */
+        }
+
+        /* Generating State Styling */
+        #app-wrapper.generating {
+            justify-content: flex-start;
+            padding: 0;
+        }
+        #app-wrapper.generating #main-title,
+        #app-wrapper.generating #main-subtitle {
+            height: 0;
+            opacity: 0;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #app-wrapper.generating #input-wrapper {
+            width: 100%;
+            max-width: 100%;
+            background-color: #F5F1EB;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border-radius: 0;
+            padding: 1rem;
+        }
+        #app-wrapper.generating #input-container {
+            /* This is now handled by the relative/absolute positioning in the HTML */
+        }
+        #app-wrapper.generating #new-chat-btn {
+            display: inline-flex;
+        }
+        #app-wrapper.generating #join-container {
+            /* This is no longer needed */
+        }
+
+        #output-wrapper {
+            display: none;
+            width: 100%;
+            flex-grow: 1;
+        }
+        #app-wrapper.generating #output-wrapper {
+            display: block;
+        }
+        
+        .output-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            /* This should match the --bg-primary in generate_html.py */
+            background-color: #faf9f7; 
+        }
+
+        /* Custom styled scrollbar */
+        #chat-list {
+            scrollbar-width: thin; /* Firefox */
+            scrollbar-color: rgba(108, 74, 63, 0.2) transparent; /* Firefox */
+        }
+        
+        #chat-list::-webkit-scrollbar {
+            width: 8px; /* WebKit */
+        }
+        
+        #chat-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        #chat-list::-webkit-scrollbar-thumb {
+            background: rgba(108, 74, 63, 0.2);
+            border-radius: 4px;
+            transition: background 0.2s ease;
+        }
+        
+        #chat-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(108, 74, 63, 0.4);
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                z-index: 999;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            }
+            
+            #main-content {
+                width: 100%;
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body class="overflow-hidden">
+    
+
+
+          <!-- Toggle button for when sidebar is closed -->
+      <button id="sidebar-toggle-closed" class="fixed top-5 left-4 w-10 h-10 rounded-xl bg-[#6C4A3F] hover:bg-[#583e35] flex items-center justify-center shadow-sm transition-colors duration-200 z-50">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" class="w-4 h-4">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+      </button>
+
+      <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div id="sidebar" class="flex flex-col collapsed">
+            <!-- Sidebar Header -->
+            <div class="px-4 py-5 border-b border-[#D4D1CC] bg-gradient-to-b from-[#FAFAF9] to-[#F5F1EB]">
+                <div class="flex items-center gap-3 mb-5">
+                    <button id="sidebar-toggle" class="w-10 h-10 rounded-xl bg-[#6C4A3F] hover:bg-[#583e35] flex items-center justify-center shadow-sm transition-colors duration-200">
+                        <svg id="sidebar-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="white" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                    <div>
+                        <h2 class="font-semibold text-lg text-[#4F4A45] leading-tight">Önceki Sohbetler</h2>
+                        <p class="text-xs text-[#8B8680] mt-0.5">Geçmiş konuşmalarınız</p>
+                    </div>
+                </div>
+                <button id="clear-all-chats" class="group flex items-center gap-2 text-sm text-[#8B8680] hover:text-red-600 transition-all duration-200 py-2 px-3 rounded-lg hover:bg-red-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 transition-transform group-hover:scale-110">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                    Tümünü Temizle
+                </button>
+            </div>
+            
+            <!-- Chat List -->
+            <div id="chat-list" class="flex-1 overflow-y-auto p-2">
+                <div id="no-chats" class="text-center text-[#8B8680] mt-8 px-4">
+                    <p class="text-sm">Henüz sohbet yok.</p>
+                    <p class="text-xs mt-1">İlk sorunuzu sorun!</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div id="main-content" class="flex flex-col flex-1">
+            <div id="app-wrapper" class="initial h-full flex flex-col items-center p-4">
+
+                <h1 id="main-title" class="text-4xl font-bold mb-4">Bugün ne öğrenmek istersin?</h1>
+                <p id="main-subtitle" class="mb-8 text-lg">Aşağıya bir konu girerek başla.</p>
+
+                <div id="input-wrapper" class="w-full max-w-2xl">
+                    <div id="input-container" class="w-full flex justify-center items-center relative">
+                        <div id="join-container" class="join main-input-group">
+                            <input id="question-input" type="text" placeholder="ör., Kara delikler nasıl oluşur?" class="input input-bordered join-item w-full" />
+                            <button id="generate-btn" class="btn btn-custom join-item">Oluştur</button>
+                        </div>
+                        <a href="/" id="new-chat-btn" class="btn btn-custom hidden absolute right-4 top-1/2 -translate-y-1/2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                            Yeni Sohbet
+                        </a>
+                    </div>
+                </div>
+
+                <div id="output-wrapper">
+                     <div id="output-container" class="h-full">
+                        <div id="loading-indicator" class="hidden h-full flex items-center justify-center">
+                            <div class="text-center">
+                                <span class="loading loading-infinity loading-lg"></span>
+                                <p class="mt-4 text-lg">İçerik oluşturuluyor, lütfen bekleyin...</p>
+                            </div>
+                        </div>
+                        <iframe id="output-iframe" class="output-iframe hidden"></iframe>
+                        <button id="follow-scroll-btn" class="fixed right-6 bottom-6 btn btn-custom opacity-80 hover:opacity-100 hidden">⬇️ Otomatik Kaydır: Kapalı</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const appWrapper = document.getElementById('app-wrapper');
+        const questionInput = document.getElementById('question-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const outputWrapper = document.getElementById('output-wrapper');
+        const outputContainer = document.getElementById('output-container');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const outputIframe = document.getElementById('output-iframe');
+        const followScrollBtn = document.getElementById('follow-scroll-btn');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebarToggleClosed = document.getElementById('sidebar-toggle-closed');
+        const sidebarIcon = document.getElementById('sidebar-icon');
+        const chatList = document.getElementById('chat-list');
+        const noChatsMessage = document.getElementById('no-chats');
+        const clearAllChatsBtn = document.getElementById('clear-all-chats');
+
+        let originalOutputContainerHTML = outputContainer.innerHTML;
+        let currentChatId = null;
+        let sidebarOpen = false;
+        let followScrollEnabled = false;
+        let globalImagePollerId = null;
+        let aggressiveImagePollerId = null;
+        // NOTE: We keep things simple. No dynamic library injection —
+        // generated HTML already includes mermaid/hljs. We only call
+        // their APIs if present.
+
+        // Minimal helper (only used as last-resort): load external script inside iframe
+        function loadScriptOnce(doc, id, src, onload) {
+            try {
+                let el = doc.getElementById(id);
+                if (el) { if (onload) el.addEventListener('load', onload, { once: true }); return; }
+                el = doc.createElement('script');
+                el.id = id;
+                el.src = src;
+                el.async = true;
+                if (onload) el.onload = onload;
+                (doc.head || doc.body || doc.documentElement).appendChild(el);
+            } catch (_) {}
+        }
+
+        // Seamless Mermaid render function for a specific iframe - no scroll disruption
+        function renderMermaidInIframe(targetIframe) {
+            try {
+                const iframeEl = targetIframe || document.getElementById('output-iframe');
+                const win = iframeEl?.contentWindow;
+                const doc = win?.document;
+                if (!win || !doc) {
+                    console.debug('🔍 Iframe not ready for mermaid rendering');
+                    return;
+                }
+                
+                const mermaidDivs = doc.querySelectorAll('.mermaid');
+                let mermaidDivsArray = Array.from(mermaidDivs);
+
+                // 🆕 Auto-detect raw mermaid code not wrapped in .mermaid
+                const possibleMermaidBlocks = doc.querySelectorAll('pre, code, p');
+                possibleMermaidBlocks.forEach((el) => {
+                    try {
+                        const txt = (el.textContent || '').trim();
+                        if (!txt) return;
+                        if (txt.startsWith('flowchart') || txt.startsWith('graph') || txt.startsWith('sequenceDiagram') || txt.startsWith('classDiagram') || txt.startsWith('stateDiagram') || txt.startsWith('erDiagram')) {
+                            // Convert to mermaid container if not already
+                            const wrapper = doc.createElement('div');
+                            wrapper.className = 'mermaid';
+                            // Mark as pending so we skip rendering incomplete/streaming raw blocks
+                            wrapper.setAttribute('data-pending', '1');
+                            wrapper.textContent = txt;
+                            el.replaceWith(wrapper);
+                            mermaidDivsArray.push(wrapper);
+                        }
+                    } catch (_) {}
+                });
+
+                if (!mermaidDivsArray.length) {
+                    console.debug('🔍 No mermaid elements found');
+                    return;
+                }
+
+                console.log(`🎨 Found ${mermaidDivsArray.length} mermaid element(s) to process`);
+
+                // Store scroll position before rendering (for safety)
+                const scrollY = win.scrollY || 0;
+                const scrollX = win.scrollX || 0;
+
+                const ready = () => {
+                    try {
+                        // Keep behavior simple to avoid jitter; no viewport lock here
+
+                        // Always reinitialize mermaid to ensure proper configuration during streaming
+                        if (win.mermaid?.initialize) {
+                            win.mermaid.initialize({ 
+                                startOnLoad: false, 
+                                theme: 'base',
+                                securityLevel: 'loose',
+                                flowchart: { useMaxWidth: false },
+                                themeVariables: {
+                                    primaryColor: '#f5f4f1',
+                                    primaryTextColor: '#2c2a26',
+                                    primaryBorderColor: '#8b5a3c',
+                                    lineColor: '#8b5a3c',
+                                    sectionBkgColor: '#faf9f7',
+                                    altSectionBkgColor: '#f5f4f1',
+                                    gridColor: '#e8e6e3',
+                                    textColor: '#2c2a26',
+                                    taskBkgColor: '#f5f4f1',
+                                    taskTextColor: '#2c2a26',
+                                    activeTaskBkgColor: '#8b5a3c',
+                                    activeTaskBorderColor: '#7a4d33',
+                                    fontFamily: 'Inter, sans-serif',
+                                    fontSize: '14px'
+                                }
+                            });
+                            console.log('🔧 Mermaid initialized/reinitialized');
+                        }
+                        
+                        // Process each mermaid element - preserve already rendered ones
+                        const unrenderedDivs = [];
+                        mermaidDivsArray.forEach((div, index) => {
+                            try {
+                                const src = (div.textContent || '').trim();
+                                if (!src) {
+                                    console.debug(`📝 Mermaid ${index}: Empty content, skipping`);
+                                    return;
+                                }
+                                
+                                // Check if already rendered (has SVG) - preserve it completely
+                                if (div.querySelector('svg')) {
+                                    console.log(`✅ Mermaid ${index}: Already rendered, preserving`);
+                                    // Ensure it's not marked as pending and text is visible
+                                    div.removeAttribute('data-pending');
+                                    div.style.color = '';
+                                    return;
+                                }
+                                
+                                // Skip placeholders (incomplete blocks) marked as pending
+                                // Also skip elements that were just created from raw text in this cycle
+                                if (div.hasAttribute('data-pending') || div.__fromRaw === true) {
+                                    console.log(`⏭️ Mermaid ${index}: Pending/streaming placeholder, skip rendering`);
+                                    return;
+                                }
+                                
+                                // Only process truly new/unrendered diagrams
+                                div.removeAttribute('data-processed');
+                                div.removeAttribute('data-mermaid-id');
+                                
+                                // Add to list of elements to render (complete blocks only)
+                                unrenderedDivs.push(div);
+                                console.log(`📋 Mermaid ${index}: Added to render queue (content: ${src.substring(0, 50)}...)`);
+                                
+                            } catch (error) {
+                                console.debug(`❌ Mermaid element ${index} processing error:`, error);
+                            }
+                        });
+                        
+                        // Render only unrendered diagrams (skip if none)
+                        if (unrenderedDivs.length > 0) {
+                            console.log(`🚀 Rendering ${unrenderedDivs.length} mermaid diagram(s)`);
+                            
+                            if (win.mermaid?.run) {
+                                // Use the newer run method if available
+                                // Render only the specific new elements
+                                const maybePromise = win.mermaid.run({ nodes: unrenderedDivs });
+                                const clearPending = () => {
+                                    unrenderedDivs.forEach((div) => {
+                                        if (div.querySelector('svg')) {
+                                            div.removeAttribute('data-pending');
+                                            div.style.color = '';
+                                        }
+                                    });
+                                };
+                                if (maybePromise && typeof maybePromise.then === 'function') {
+                                    maybePromise.then(clearPending).catch(clearPending);
+                                } else {
+                                    setTimeout(clearPending, 150);
+                                }
+                                console.log('✅ Mermaid diagrams rendered with run()');
+                            } else if (win.mermaid?.init) {
+                                // Fallback to older init method
+                                win.mermaid.init(undefined, unrenderedDivs);
+                                setTimeout(() => {
+                                    unrenderedDivs.forEach((div) => {
+                                        if (div.querySelector('svg')) {
+                                            div.removeAttribute('data-pending');
+                                            div.style.color = '';
+                                        }
+                                    });
+                                }, 150);
+                                console.log('✅ Mermaid diagrams rendered with init()');
+                            } else {
+                                console.warn('⚠️ No mermaid rendering method available');
+                            }
+                        } else {
+                            console.log('ℹ️ All mermaid diagrams already rendered');
+                        }
+                        
+                        // Avoid forcing scroll restoration here to prevent jitter while streaming
+                        // Only ensure diagrams are rendered; scrolling is handled elsewhere
+                        setTimeout(() => {
+                            // Retry only for complete, non-pending elements
+                            const stillUnrendered = Array.from(doc.querySelectorAll('.mermaid:not([data-pending]):not(:has(svg))'));
+                            if (stillUnrendered.length > 0) {
+                                console.warn(`⚠️ ${stillUnrendered.length} mermaid diagram(s) still not rendered, retrying...`);
+                                if (win.mermaid?.run) {
+                                    win.mermaid.run({ nodes: stillUnrendered });
+                                } else if (win.mermaid?.init) {
+                                    win.mermaid.init(undefined, stillUnrendered);
+                                }
+                            }
+                        }, 500);
+
+                        // Do not force additional scroll restorations here
+                        
+                    } catch (error) {
+                        console.error('❌ Mermaid render error:', error);
+                    }
+                };
+
+                // Load mermaid if not available, otherwise render immediately
+                if (!win.mermaid) {
+                    console.log('📦 Loading mermaid library...');
+                    loadScriptOnce(doc, 'mermaid-cdn', 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js', ready);
+                } else {
+                    console.log('📦 Mermaid library already loaded, rendering...');
+                    ready();
+                }
+            } catch (error) {
+                console.error('❌ Mermaid setup error:', error);
+            }
+        }
+
+
+        // Add this line to get the new button
+        const newChatBtn = document.getElementById('new-chat-btn');
+
+        // Chat management functions
+        function generateChatId() {
+            return 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function saveChat(chatId, question, html) {
+            const chats = getChats();
+            const chat = {
+                id: chatId,
+                question: question,
+                html: html,
+                timestamp: Date.now(),
+                date: new Date().toLocaleDateString('tr-TR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })
+            };
+            chats[chatId] = chat;
+            localStorage.setItem('chats', JSON.stringify(chats));
+            renderChatList();
+        }
+
+        function getChats() {
+            try {
+                const chats = localStorage.getItem('chats');
+                if (!chats) return {};
+                
+                const parsedChats = JSON.parse(chats);
+                
+                // Filter out any corrupted chat entries
+                const validChats = {};
+                Object.values(parsedChats).forEach(chat => {
+                    if (chat && chat.id && chat.question && chat.html && chat.timestamp) {
+                        validChats[chat.id] = chat;
+                    }
+                });
+                
+                return validChats;
+            } catch (error) {
+                console.error('Error loading chats from localStorage:', error);
+                // Clear corrupted data
+                localStorage.removeItem('chats');
+                return {};
+            }
+        }
+
+        function deleteChat(chatId) {
+            const chats = getChats();
+            const chat = chats[chatId];
+            const chatTitle = chat && chat.question ? chat.question.substring(0, 50) + (chat.question.length > 50 ? '...' : '') : 'Bu sohbet';
+            
+            if (confirm(`"${chatTitle}" sohbetini silmek istediğinizden emin misiniz?`)) {
+                delete chats[chatId];
+                localStorage.setItem('chats', JSON.stringify(chats));
+                
+                if (currentChatId === chatId) {
+                    // If current chat is deleted, reset to initial state
+                    resetToInitialState();
+                }
+                
+                renderChatList();
+            }
+        }
+
+        function clearAllChats() {
+            if (confirm('Tüm sohbetleri silmek istediğinizden emin misiniz?')) {
+                localStorage.removeItem('chats');
+                resetToInitialState();
+                renderChatList();
+            }
+        }
+
+        // Debug function - available in browser console as window.fixStorage()
+        function fixStorage() {
+            localStorage.removeItem('chats');
+            resetToInitialState();
+            renderChatList();
+            console.log('Storage cleared and fixed.');
+            return 'Storage cleared successfully!';
+        }
+        
+        // Make it available globally for debugging
+        window.fixStorage = fixStorage;
+
+        function loadChat(chatId) {
+            const chats = getChats();
+            const chat = chats[chatId];
+            if (!chat) return;
+
+            currentChatId = chatId;
+            questionInput.value = chat.question;
+            
+            // Switch to generating view
+            if (appWrapper.classList.contains('initial')) {
+                appWrapper.classList.remove('initial');
+                appWrapper.classList.add('generating');
+            }
+
+            // Show the new chat button
+            newChatBtn.classList.remove('hidden');
+
+            // Display the HTML content seamlessly
+            const newOutputIframe = document.getElementById('output-iframe');
+            updateIframeContentSeamlessly(newOutputIframe, chat.html, true);
+            newOutputIframe.classList.remove('hidden');
+            document.getElementById('loading-indicator').classList.add('hidden');
+
+            // Update active chat in sidebar
+            renderChatList();
+        }
+
+        function renderChatList() {
+            const chats = getChats();
+            const chatArray = Object.values(chats)
+                .filter(chat => chat && chat.id && chat.question && chat.timestamp) // Extra safety filter
+                .sort((a, b) => b.timestamp - a.timestamp);
+            
+            if (chatArray.length === 0) {
+                noChatsMessage.style.display = 'block';
+                chatList.innerHTML = '';
+                return;
+            }
+
+            noChatsMessage.style.display = 'none';
+            
+            chatList.innerHTML = chatArray.map(chat => {
+                // Ensure we have valid data
+                const question = chat.question || 'Başlıksız Sohbet';
+                const date = chat.date || new Date(chat.timestamp).toLocaleDateString('tr-TR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                return `
+                    <div class="chat-item ${currentChatId === chat.id ? 'active' : ''}" 
+                         onclick="loadChat('${chat.id}')" 
+                         data-chat-id="${chat.id}">
+                        <div class="chat-question">${question}</div>
+                        <div class="chat-date">
+                            ${date}
+                            <button class="delete-chat" onclick="event.stopPropagation(); deleteChat('${chat.id}')">
+                                Sil
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function resetToInitialState() {
+            currentChatId = null;
+            questionInput.value = '';
+            appWrapper.classList.remove('generating');
+            appWrapper.classList.add('initial');
+            newChatBtn.classList.add('hidden');
+            
+            // Reset output container
+            outputContainer.innerHTML = originalOutputContainerHTML;
+            
+            // Update chat list to remove active state
+            renderChatList();
+        }
+
+        function toggleSidebar() {
+            sidebarOpen = !sidebarOpen;
+            
+            if (sidebarOpen) {
+                sidebar.classList.remove('collapsed');
+                sidebarToggleClosed.style.display = 'none';
+                sidebarIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />';
+            } else {
+                sidebar.classList.add('collapsed');
+                sidebarToggleClosed.style.display = 'flex';
+                sidebarIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />';
+            }
+        }
+
+        async function generateContent() {
+            const question = questionInput.value.trim();
+            if (!question) {
+                alert('Lütfen bir soru veya konu girin.');
+                return;
+            }
+
+            // Generate new chat ID if this is a new chat
+            if (!currentChatId) {
+                currentChatId = generateChatId();
+            }
+
+            // Show the new chat button
+            newChatBtn.classList.remove('hidden');
+            followScrollBtn.classList.remove('hidden');
+
+            // Restore the output container in case of a previous error
+            outputContainer.innerHTML = originalOutputContainerHTML;
+            // Re-select the elements inside the restored container
+            const newLoadingIndicator = document.getElementById('loading-indicator');
+            const newOutputIframe = document.getElementById('output-iframe');
+
+            // Switch to generating view
+            if (appWrapper.classList.contains('initial')) {
+                appWrapper.classList.remove('initial');
+                appWrapper.classList.add('generating');
+            }
+
+            // Show loading indicator and hide iframe initially
+            newLoadingIndicator.classList.remove('hidden');
+            newOutputIframe.classList.add('hidden');
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<span class="loading loading-spinner"></span> Oluşturuluyor...';
+
+            try {
+                // Use streaming
+                const streamSuccess = await generateContentStream(question, newLoadingIndicator, newOutputIframe);
+                if (!streamSuccess) {
+                    console.log('Streaming completed but no content received, trying fallback...');
+                    await generateContentFallback(question, newLoadingIndicator, newOutputIframe);
+                }
+            } catch (error) {
+                console.error('Streaming failed, falling back to regular request:', error);
+                // Fallback to non-streaming
+                await generateContentFallback(question, newLoadingIndicator, newOutputIframe);
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = 'Oluştur';
+            }
+        }
+
+        async function generateContentStream(question, loadingIndicator, outputIframe) {
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: question, stream: true })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let finalHtml = '';
+            let buffer = '';
+            let streamEnded = false;
+            let contentReceived = false;
+
+            // Hide loading indicator once streaming starts
+            loadingIndicator.classList.add('hidden');
+            outputIframe.classList.remove('hidden');
+            // Ensure a resilient, global poller runs regardless of stream lifecycle
+            try {
+                if (!globalImagePollerId) {
+                    globalImagePollerId = setInterval(() => {
+                        try { pollImageUpdatesInIframe(outputIframe); } catch (_) {}
+                    }, 2000);
+                }
+            } catch (_) {}
+            // If follow-scroll is enabled, jump to bottom when stream starts
+            if (followScrollEnabled) {
+                try { outputIframe.contentWindow?.scrollTo(0, outputIframe.contentWindow.document.body.scrollHeight); } catch (_) {}
+            }
+            
+            // Initialize iframe with empty content if needed
+            if (!outputIframe.srcdoc) {
+                outputIframe.srcdoc = '<!DOCTYPE html><html><head><style>body{font-family:sans-serif;padding:20px;color:#333;}</style></head><body><p>Initializing...</p></body></html>';
+            }
+
+        // Seamless iframe content update without reload - eliminates scroll jittering
+        let isUpdatingIframe = false;
+        function updateIframeContentSeamlessly(iframe, newHtml, shouldRenderMermaid = true) {
+            if (isUpdatingIframe) {
+                console.log('⏸️ Iframe update already in progress, skipping...');
+                return;
+            }
+            
+            try {
+                const win = iframe.contentWindow;
+                const doc = win?.document;
+                
+                // If iframe is not ready or this is the first load, use srcdoc
+                if (!win || !doc || !doc.body) {
+                    console.log('🔄 First load - using srcdoc');
+                    try {
+                        const tmpDoc = new DOMParser().parseFromString(newHtml, 'text/html');
+                        tmpDoc.querySelectorAll('.mermaid').forEach(div => {
+                            div.setAttribute('data-pending', '1');
+                            div.style.color = 'transparent';
+                        });
+                        newHtml = tmpDoc.documentElement.outerHTML;
+                    } catch (_) {}
+                    iframe.srcdoc = newHtml;
+                    if (shouldRenderMermaid) {
+                        iframe.onload = () => {
+                            setTimeout(() => renderMermaidInIframe(iframe), 60);
+                            // Begin polling for AI image placeholders right after first load
+                            setTimeout(() => pollImageUpdatesInIframe(iframe), 200);
+                        };
+                    }
+                    return;
+                }
+                
+                isUpdatingIframe = true;
+                
+                // Store current scroll position more precisely
+                const scrollY = Math.round(win.scrollY || 0);
+                const scrollX = Math.round(win.scrollX || 0);
+                console.log('📏 Current scroll position:', scrollY);
+                // Detect if near bottom to preserve bottom anchoring behavior
+                const docHeight = doc.body ? doc.body.scrollHeight : 0;
+                const viewportBottom = (win.innerHeight || 0) + scrollY;
+                const wasNearBottom = viewportBottom >= (docHeight - 120);
+                
+                // Parse the new HTML
+                const parser = new DOMParser();
+                const newDoc = parser.parseFromString(newHtml, 'text/html');
+                
+                if (!newDoc || !newDoc.body) {
+                    console.warn('Failed to parse new HTML, falling back to srcdoc');
+                    iframe.srcdoc = newHtml;
+                    isUpdatingIframe = false;
+                    return;
+                }
+                
+                // If this is a partial update, ensure Mermaid blocks are placeholders
+                if (!shouldRenderMermaid) {
+                    try {
+                        // 1) Mark existing mermaid containers as pending (hide text, show loader)
+                        newDoc.querySelectorAll('.mermaid').forEach((div) => {
+                            if (!div.hasAttribute('data-pending')) {
+                                div.setAttribute('data-pending', '1');
+                                div.style.color = 'transparent';
+                            }
+                        });
+                        // 2) Wrap probable raw mermaid code into placeholder containers
+                        const probable = newDoc.querySelectorAll('pre, code, p');
+                        probable.forEach((el) => {
+                            try {
+                                const txt = (el.textContent || '').trim();
+                                if (!txt) return;
+                                if (txt.startsWith('flowchart') || txt.startsWith('graph') || txt.startsWith('sequenceDiagram') || txt.startsWith('classDiagram') || txt.startsWith('stateDiagram') || txt.startsWith('erDiagram')) {
+                                    // Avoid double-wrapping if already inside a .mermaid
+                                    if (el.closest('.mermaid')) return;
+                                    const wrapper = newDoc.createElement('div');
+                                    wrapper.className = 'mermaid';
+                                    wrapper.setAttribute('data-pending', '1');
+                                    wrapper.textContent = txt;
+                                    // Mark this newly created wrapper so we definitely skip rendering this tick
+                                    try { wrapper.__fromRaw = true; } catch (_) {}
+                                    el.replaceWith(wrapper);
+                                }
+                            } catch (_) {}
+                        });
+                    } catch (_) {}
+                }
+
+                // Replace matching Mermaid blocks in the incoming HTML with already-rendered SVG blocks
+                try {
+                    const existingMap = new Map();
+                    doc.querySelectorAll('.mermaid').forEach(div => {
+                        const key = div.getAttribute('data-mermaid-key');
+                        if (key && div.querySelector('svg')) {
+                            existingMap.set(key, div.outerHTML);
+                        }
+                    });
+                    if (existingMap.size) {
+                        newDoc.querySelectorAll('.mermaid').forEach(el => {
+                            const key = el.getAttribute('data-mermaid-key');
+                            if (key && existingMap.has(key)) {
+                                // Swap the element with the preserved rendered version
+                                el.outerHTML = existingMap.get(key);
+                            }
+                        });
+                    }
+                } catch (_) {}
+                
+                // Update head if it has changed (for new styles/scripts)
+                if (newDoc.head && newDoc.head.innerHTML !== doc.head.innerHTML) {
+                    doc.head.innerHTML = newDoc.head.innerHTML;
+                    console.log('📄 Updated head content');
+                }
+                
+                // Update body content directly - NO RELOAD, NO JITTER!
+                doc.body.innerHTML = newDoc.body.innerHTML;
+                console.log('📝 Updated body content seamlessly');
+                // Kick image polling for any pending AI images in the iframe
+                try { pollImageUpdatesInIframe(iframe); } catch (_) {}
+                
+                // Restore scroll position precisely after DOM update
+                requestAnimationFrame(() => {
+                    if (win && !win.closed) {
+                        if (followScrollEnabled || wasNearBottom) {
+                            // Keep user at the bottom if they were already there or auto-follow is on
+                            try { win.scrollTo(0, doc.body.scrollHeight); } catch (_) {}
+                        } else {
+                            // Restore exact previous position and apply one delayed correction
+                            try { win.scrollTo(scrollX, scrollY); } catch (_) {}
+                            let userMoved = false;
+                            const onUserScroll = () => { userMoved = true; };
+                            try { win.addEventListener('scroll', onUserScroll, { passive: true, once: true }); } catch (_) {}
+                            setTimeout(() => {
+                                if (!userMoved && win && !win.closed) {
+                                    try { win.scrollTo(scrollX, scrollY); } catch (_) {}
+                                }
+                            }, 160);
+                        }
+                    }
+                });
+                
+                // Re-initialize syntax highlighting if available (skip during partial updates)
+                if (shouldRenderMermaid && win.hljs) {
+                    try {
+                        win.hljs.highlightAll();
+                        console.log('🎨 Re-initialized syntax highlighting');
+                    } catch (hljsError) {
+                        console.debug('Could not re-initialize hljs:', hljsError);
+                    }
+                }
+                
+                // Render Mermaid charts with reduced delay for smoother streaming
+                if (shouldRenderMermaid) {
+                    setTimeout(() => {
+                        renderMermaidInIframe(iframe);
+                        if (followScrollEnabled) {
+                            try { iframe.contentWindow?.scrollTo(0, iframe.contentWindow.document.body.scrollHeight); } catch (_) {}
+                        }
+                    }, 60);
+                }
+                
+                isUpdatingIframe = false;
+                
+            } catch (error) {
+                console.warn('Seamless update failed, falling back to srcdoc:', error);
+                // Fallback to the old method if seamless update fails
+                iframe.srcdoc = newHtml;
+                if (shouldRenderMermaid) {
+                    iframe.onload = () => {
+                        setTimeout(() => renderMermaidInIframe(iframe), 60);
+                    };
+                }
+                isUpdatingIframe = false;
+            }
+        }
+        
+        // Poll AI image placeholders inside the iframe and swap them when ready
+        function pollImageUpdatesInIframe(iframe) {
+            try {
+                const win = iframe?.contentWindow; const doc = win?.document;
+                if (!win || !doc) return;
+                const pending = Array.from(doc.querySelectorAll('.ai-image-container[data-pending="1"]'));
+                if (!pending.length) return;
+                pending.forEach((container) => {
+                    try {
+                        const hash = container.getAttribute('data-prompt-hash');
+                        if (!hash) return;
+                        fetch(`/image_status/${hash}`)
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data && data.status === 'ready' && data.html) {
+                                    const temp = doc.createElement('div');
+                                    temp.innerHTML = data.html.trim();
+                                    const el = temp.firstElementChild;
+                                    if (el) container.outerHTML = el.outerHTML;
+                                }
+                            })
+                            .catch(() => {});
+                    } catch (_) {}
+                });
+                // Continue polling while any pending containers remain
+                if (doc.querySelector('.ai-image-container[data-pending="1"]')) {
+                    setTimeout(() => pollImageUpdatesInIframe(iframe), 1500);
+                }
+            } catch (_) {}
+        }
+        
+        // Aggressive post-stream poller until all images are swapped or timeout
+        function startAggressiveImagePolling(iframe, timeoutMs = 60000) {
+            try {
+                let startedAt = Date.now();
+                if (aggressiveImagePollerId) clearInterval(aggressiveImagePollerId);
+                aggressiveImagePollerId = setInterval(() => {
+                    try {
+                        pollImageUpdatesInIframe(iframe);
+                        const win = iframe?.contentWindow; const doc = win?.document;
+                        if (!win || !doc) return;
+                        const stillPending = doc.querySelector('.ai-image-container[data-pending="1"]');
+                        const expired = (Date.now() - startedAt) > timeoutMs;
+                        if (!stillPending || expired) {
+                            clearInterval(aggressiveImagePollerId);
+                            aggressiveImagePollerId = null;
+                        }
+                    } catch (_) {}
+                }, 1000);
+            } catch (_) {}
+        }
+        
+        // Wrapper for backward compatibility - but now with seamless updates!
+        function updateIframeContent(newHtml) {
+            const iframe = document.getElementById('output-iframe');
+            updateIframeContentSeamlessly(iframe, newHtml, true);
+        }
+        // Partial updates during streaming: render only complete Mermaid blocks (placeholders are skipped)
+        function updateIframeContentPartial(newHtml) {
+            const iframe = document.getElementById('output-iframe');
+            updateIframeContentSeamlessly(iframe, newHtml, true);
+        }
+        
+        // Keep the old function for cases where we explicitly need a full reload
+        function updateIframeContentWithScrollPreservation(iframe, newHtml, shouldRenderMermaid = true) {
+            const win = iframe.contentWindow;
+            const scrollY = win ? (win.scrollY || 0) : 0;
+            
+            iframe.srcdoc = newHtml;
+            iframe.onload = () => {
+                try {
+                    if (iframe.contentWindow) {
+                        setTimeout(() => {
+                            iframe.contentWindow.scrollTo(0, scrollY);
+                            if (shouldRenderMermaid) {
+                                setTimeout(() => renderMermaidInIframe(iframe), 150);
+                            }
+                        }, 50);
+                    }
+                } catch (error) {
+                    console.debug('Scroll restore failed:', error);
+                }
+            };
+        }
+
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                    console.log('Stream reader finished');
+                    break;
+                }
+
+                // Decode the chunk and add to buffer
+                const chunk = decoder.decode(value, { stream: true });
+                buffer += chunk;
+
+                // Process complete lines from buffer
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const jsonData = line.slice(6).trim();
+                            if (jsonData === '') continue; // Skip empty data lines
+                            
+                            const data = JSON.parse(jsonData);
+                            
+                            if (data.type === 'start') {
+                                console.log('🟢 Stream started:', data.message);
+                            } else if (data.type === 'content') {
+                                // Interim update: avoid Mermaid rendering to prevent syntax errors while streaming
+                                updateIframeContentPartial(data.html);
+                                finalHtml = data.html;
+                                contentReceived = true;
+                                console.log('📝 HTML updated with charts rendered');
+                            } else if (data.type === 'chunk') {
+                                // Handle text-only chunks for feedback
+                                console.log('📄 Chunk received');
+                            } else if (data.type === 'complete') {
+                                // Final HTML received
+                                finalHtml = data.html;
+                                // Fast path: update without Mermaid render to let UI finish immediately
+                                updateIframeContentPartial(finalHtml);
+                                // Defer full render (Mermaid + hljs) to the next tick
+                                setTimeout(() => updateIframeContent(finalHtml), 0);
+                                contentReceived = true;
+                                // Immediately poll once for any late AI images
+                                try { pollImageUpdatesInIframe(outputIframe); } catch (_) {}
+                                // Begin aggressive polling until all pending images resolve
+                                startAggressiveImagePolling(outputIframe);
+                                
+                                // Save chat to localStorage
+                                saveChat(currentChatId, question, finalHtml);
+                                console.log('✅ Stream completed with final HTML');
+                                streamEnded = true;
+                                // Immediately re-enable the button
+                                try {
+                                    const btn = document.getElementById('generate-btn');
+                                    if (btn) { btn.disabled = false; btn.innerHTML = 'Oluştur'; }
+                                } catch (_) {}
+                            } else if (data.type === 'end') {
+                                console.log('🏁 Stream ended');
+                                streamEnded = true;
+                                // Safety: ensure button is enabled on end
+                                try {
+                                    const btn = document.getElementById('generate-btn');
+                                    if (btn) { btn.disabled = false; btn.innerHTML = 'Oluştur'; }
+                                } catch (_) {}
+                                // One more immediate poll at end to catch just-finished images
+                                try { pollImageUpdatesInIframe(outputIframe); } catch (_) {}
+                                // Keep aggressively polling for a while to catch late image completions
+                                startAggressiveImagePolling(outputIframe);
+                                break;
+                            } else if (data.type === 'error') {
+                                console.error('❌ Stream error:', data.error);
+                                throw new Error(data.error);
+                            }
+                        } catch (parseError) {
+                            console.warn('⚠️ Failed to parse SSE data:', parseError, 'Line:', line);
+                        }
+                    }
+                }
+
+                if (streamEnded) break;
+            }
+
+            // Ensure we have final content saved
+            if (finalHtml) {
+                saveChat(currentChatId, question, finalHtml);
+                console.log('💾 Saved final content after stream end');
+            }
+            
+            // Return success status
+            return contentReceived;
+        }
+
+        async function generateContentFallback(question, loadingIndicator, outputIframe) {
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: question, stream: false })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                // Use seamless update for fallback too
+                updateIframeContentSeamlessly(outputIframe, data.html, true);
+                outputIframe.classList.remove('hidden');
+                loadingIndicator.classList.add('hidden');
+                // Start global image polling as a safety net for late images
+                try {
+                    if (!globalImagePollerId) {
+                        globalImagePollerId = setInterval(() => {
+                            try { pollImageUpdatesInIframe(outputIframe); } catch (_) {}
+                        }, 2000);
+                    }
+                } catch (_) {}
+                
+                // Save chat to localStorage
+                saveChat(currentChatId, question, data.html);
+            } else {
+                showError(data.error || 'Bilinmeyen bir hata oluştu.');
+            }
+        }
+        
+        function showError(message) {
+            document.getElementById('loading-indicator').classList.add('hidden');
+            document.getElementById('output-iframe').classList.add('hidden');
+
+            outputContainer.innerHTML = `<div class="h-full flex items-center justify-center text-center p-4">
+                <div class="alert alert-error max-w-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span><strong>Hata:</strong> ${message}</span>
+                </div>
+            </div>`;
+        }
+
+        // Event listeners
+        generateBtn.addEventListener('click', generateContent);
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                generateContent();
+            }
+        });
+
+        sidebarToggle.addEventListener('click', toggleSidebar);
+        sidebarToggleClosed.addEventListener('click', toggleSidebar);
+        clearAllChatsBtn.addEventListener('click', clearAllChats);
+
+        // New chat button functionality
+        newChatBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            resetToInitialState();
+        });
+
+        // Initialize sidebar state
+        function initializeSidebar() {
+            if (!sidebarOpen) {
+                sidebar.classList.add('collapsed');
+                sidebarToggleClosed.style.display = 'flex';
+                sidebarIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />';
+            } else {
+                sidebarToggleClosed.style.display = 'none';
+            }
+        }
+
+        // Initialize
+        initializeSidebar();
+        renderChatList();
+
+        // Follow-scroll toggle behavior
+        followScrollBtn.addEventListener('click', () => {
+            followScrollEnabled = !followScrollEnabled;
+            followScrollBtn.textContent = followScrollEnabled ? '⬇️ Otomatik Kaydır: Açık' : '⬇️ Otomatik Kaydır: Kapalı';
+            if (followScrollEnabled) {
+                try {
+                    const win = document.getElementById('output-iframe')?.contentWindow;
+                    win?.scrollTo(0, win.document.body.scrollHeight);
+                } catch (_) {}
+            }
+        });
+    </script>
+</body>
+</html> 
