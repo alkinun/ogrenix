@@ -9,63 +9,7 @@ from markdown.extensions import codehilite, tables, toc
 import hashlib
 import uuid
 import requests
-from openai import OpenAI
 import threading
-import os
-
-# Initialize OpenRouter client for image generation
-image_client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY")
-)
-
-def generate_image_with_gemini(prompt):
-    """Generate image using Google Gemini 2.5 Flash Image Preview via OpenRouter"""
-    try:
-        response = image_client.chat.completions.create(
-            model="google/gemini-2.5-flash-image-preview",
-            messages=[
-                {
-                    "role": "user", 
-                    "content": prompt
-                }
-            ],
-            max_tokens=2048  # Increased for larger images
-        )
-        
-        # The image data is embedded in the full response string, not in message.content
-        # Extract base64 pattern from the full response
-        response_str = str(response)
-        
-        # Look for base64 pattern in the full response
-        import re
-        base64_patterns = re.findall(r'[A-Za-z0-9+/]{1000,}={0,2}', response_str)
-        
-        if base64_patterns:
-            # Use the longest pattern (likely the image)
-            longest_pattern = max(base64_patterns, key=len)
-            try:
-                # Validate it's proper base64
-                base64.b64decode(longest_pattern)
-                return longest_pattern
-            except Exception:
-                pass
-        
-        # Fallback: check if content itself is base64
-        content = response.choices[0].message.content
-        if content and len(content) > 1000:
-            content = content.strip()
-            try:
-                base64.b64decode(content)
-                return content
-            except Exception:
-                pass
-            
-        return None
-        
-    except Exception as e:
-        print(f"Error generating image: {e}")
-        return None
 
 def generate_html(md_str):
     """
@@ -90,8 +34,7 @@ def generate_html(md_str):
     # Step 3: Process p5.js sketches
     processed_md = process_p5js_blocks(processed_md)
     
-    # Step 4: Process image generation blocks
-    processed_md = process_image_blocks(processed_md)
+    # AI image blocks removed
     
     # Step 5: Convert markdown to HTML
     md_processor = markdown.Markdown(
@@ -123,10 +66,8 @@ def generate_html(md_str):
     
     return full_html
 
-def generate_html_streaming(md_str, session_id, processed_image_blocks):
-    """
-    Streaming version that skips image generation to avoid blocking
-    """
+def generate_html_streaming(md_str):
+    """Streaming-safe HTML rendering"""
     
     # Step 0: Replace any incomplete special code fences with placeholders
     md_str = preprocess_incomplete_blocks(md_str)
@@ -140,8 +81,7 @@ def generate_html_streaming(md_str, session_id, processed_image_blocks):
     # Step 3: Process p5.js sketches
     processed_md = process_p5js_blocks(processed_md)
     
-    # Step 4: Process image generation blocks (non-blocking)
-    processed_md = process_image_blocks_streaming(processed_md, session_id, processed_image_blocks)
+    # AI image blocks removed in streaming
     
     # Step 5: Convert markdown to HTML
     md_processor = markdown.Markdown(
@@ -181,7 +121,7 @@ def preprocess_incomplete_blocks(md_str: str) -> str:
     - ```mermaid
     - ```p5js
     - ```python.matplotlib
-    - ```image
+    
     """
     def replace_incomplete(md: str, fence_lang: str, placeholder_html: str) -> str:
         # Look for occurrences of the starting fence
@@ -228,17 +168,10 @@ def preprocess_incomplete_blocks(md_str: str) -> str:
         '    <!-- Grafik hazırlanıyor... -->\n'
         '</div>'
     )
-    # Image generation placeholder
-    image_placeholder = (
-        '<div class="ai-image-container" data-pending="1">\n'
-        '    <!-- Görsel oluşturuluyor... -->\n'
-        '</div>'
-    )
     
     md_str = replace_incomplete(md_str, 'mermaid', mermaid_placeholder)
     md_str = replace_incomplete(md_str, 'p5js', p5_placeholder)
     md_str = replace_incomplete(md_str, 'python.matplotlib', mpl_placeholder)
-    md_str = replace_incomplete(md_str, 'image', image_placeholder)
     return md_str
 
 def process_matplotlib_blocks(md_str):
@@ -465,189 +398,21 @@ def process_p5js_blocks(md_str):
     return re.sub(pattern, replace_p5js, md_str, flags=re.DOTALL)
 
 def process_image_blocks(md_str):
-    """Process image generation code blocks using Google Gemini 2.5 Flash Image Preview"""
-    
-    # Pattern to match ```image code blocks
-    pattern = r'```image\n(.*?)\n```'
-    
-    def replace_image(match):
-        image_prompt = match.group(1).strip()
-        
-        try:
-            # Generate the image using our local function
-            img_base64 = generate_image_with_gemini(image_prompt)
-            
-            if img_base64:
-                # Generate unique ID for the image
-                image_id = f"ai_image_{uuid.uuid4().hex[:8]}"
-                
-                # Return HTML img tag with styling
-                return f'''<div class="ai-image-container" id="{image_id}">
-    <img src="data:image/png;base64,{img_base64}" alt="AI Generated Image" class="ai-generated-image"/>
-    <details class="code-toggle">
-        <summary>Prompt'u Göster</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
-            else:
-                # Return error message if image generation fails
-                return f'''<div class="error-box">
-    <div class="error-title">Görsel Oluşturma Hatası</div>
-    <div class="error-message">Görsel oluşturulamadı. Lütfen tekrar deneyin.</div>
-    <details class="code-toggle">
-        <summary>Prompt</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
-                
-        except Exception as e:
-            # Return error message if code execution fails
-            return f'''<div class="error-box">
-    <div class="error-title">Görsel Oluşturma Hatası</div>
-    <div class="error-message">{str(e)}</div>
-    <details class="code-toggle">
-        <summary>Prompt</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
-    
-    return re.sub(pattern, replace_image, md_str, flags=re.DOTALL)
+    return md_str
 
-def process_image_blocks_streaming(md_str, session_id, processed_image_blocks):
-    """Process image generation code blocks in streaming mode (non-blocking)"""
-    import hashlib
-    
-    # Pattern to match ```image code blocks
-    pattern = r'```image\n(.*?)\n```'
-    
-    def replace_image_streaming(match):
-        image_prompt = match.group(1).strip()
-        
-        # Create a unique hash for this image prompt
-        prompt_hash = hashlib.md5(image_prompt.encode()).hexdigest()
-        image_id = f"ai_image_{prompt_hash[:8]}"
-        
-        # If we already have a result for this prompt, return it immediately
-        try:
-            from app import image_generation_status
-            info = image_generation_status.get(prompt_hash)
-        except Exception:
-            info = None
-        
-        if info and info.get('status') == 'ready' and info.get('image_data'):
-            img_base64 = info.get('image_data')
-            return f'''<div class="ai-image-container" id="{image_id}">
-    <img src="data:image/png;base64,{img_base64}" alt="AI Generated Image" class="ai-generated-image"/>
-    <details class="code-toggle">
-        <summary>Prompt'u Göster</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
-        elif info and info.get('status') == 'failed':
-            return f'''<div class="error-box">
-    <div class="error-title">Görsel Oluşturma Hatası</div>
-    <div class="error-message">Görsel oluşturulamadı. Lütfen tekrar deneyin.</div>
-    <details class="code-toggle">
-        <summary>Prompt</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
-        
-        # If not ready/failed, ensure background generation is started only once
-        if prompt_hash not in processed_image_blocks:
-            processed_image_blocks.add(prompt_hash)
-            start_background_image_generation(prompt_hash, image_prompt, session_id)
-        
-        # Return placeholder HTML that will be updated later
-        return f'''<div class="ai-image-container" id="{image_id}" data-prompt-hash="{prompt_hash}" data-pending="1">
-    <!-- Görsel oluşturuluyor... -->
-    <details class="code-toggle">
-        <summary>Prompt'u Göster</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
-    
-    return re.sub(pattern, replace_image_streaming, md_str, flags=re.DOTALL)
+def process_image_blocks_streaming(md_str):
+    return md_str
 
 def get_existing_image_html(prompt_hash, image_prompt):
-    """Return correct HTML based on current background generation status"""
-    image_id = f"ai_image_{prompt_hash[:8]}"
-    try:
-        from app import image_generation_status
-        info = image_generation_status.get(prompt_hash)
-    except Exception:
-        info = None
-    
-    if info and info.get('status') == 'ready' and info.get('image_data'):
-        img_base64 = info.get('image_data')
-        return f'''<div class="ai-image-container" id="{image_id}">
-    <img src="data:image/png;base64,{img_base64}" alt="AI Generated Image" class="ai-generated-image"/>
-    <details class="code-toggle">
-        <summary>Prompt'u Göster</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
-    elif info and info.get('status') == 'failed':
-        return f'''<div class="error-box">
-    <div class="error-title">Görsel Oluşturma Hatası</div>
-    <div class="error-message">Görsel oluşturulamadı. Lütfen tekrar deneyin.</div>
-    <details class="code-toggle">
-        <summary>Prompt</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
-    else:
-        return f'''<div class="ai-image-container" id="{image_id}" data-prompt-hash="{prompt_hash}" data-pending="1">
-    <!-- Görsel oluşturuluyor... -->
-    <details class="code-toggle">
-        <summary>Prompt'u Göster</summary>
-        <pre class="code-block"><code class="language-text">{image_prompt}</code></pre>
-    </details>
-</div>'''
+    return ''
 
 def start_background_image_generation(prompt_hash, image_prompt, session_id):
-    """Start image generation in a background thread"""
-    def generate_image_async():
-        try:
-            # Import here to avoid circular imports
-            from app import image_generation_status
-            
-            # Store the prompt for later use
-            image_generation_status[prompt_hash] = {
-                'prompt': image_prompt,
-                'session_id': session_id,
-                'status': 'generating'
-            }
-            
-            img_base64 = generate_image_with_gemini(image_prompt)
-            
-            # Update the status with the result
-            image_generation_status[prompt_hash].update({
-                'image_data': img_base64,
-                'status': 'ready' if img_base64 else 'failed'
-            })
-            
-            print(f"Image generated for hash {prompt_hash}: {'Success' if img_base64 else 'Failed'}")
-        except Exception as e:
-            # Import here to avoid circular imports
-            from app import image_generation_status
-            image_generation_status[prompt_hash] = {
-                'prompt': image_prompt,
-                'session_id': session_id,
-                'status': 'failed',
-                'error': str(e)
-            }
-            print(f"Background image generation failed for {prompt_hash}: {e}")
-    
-    # Start the thread
-    thread = threading.Thread(target=generate_image_async)
-    thread.daemon = True
-    thread.start()
+    return None
 
 def generate_complete_html(html_content):
     """Generate complete HTML document with minimal, modern styling"""
     
-    return f'''<!DOCTYPE html>
+    html_tpl = '''<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -1155,9 +920,9 @@ def generate_complete_html(html_content):
     
     <script>
         // Initialize Mermaid once and render any present diagrams
-        (function ensureMermaidInitialized() {{
-            try {{
-                if (!window.__MERMAID_INITED__) {{
+        (function ensureMermaidInitialized() {
+            try {
+                if (!window.__MERMAID_INITED__) {
                     mermaid.initialize({{
                         startOnLoad: false,
                         securityLevel: 'loose',
@@ -1198,35 +963,35 @@ def generate_complete_html(html_content):
         hljs.highlightAll();
         
         // Initialize p5.js sketches after DOM and p5.js are fully loaded
-        function waitForP5AndInitialize() {{
-            if (typeof p5 !== 'undefined') {{
+        function waitForP5AndInitialize() {
+            if (typeof p5 !== 'undefined') {
                 initializeP5Sketches();
-            }} else {{
+            } else {
                 console.log('Waiting for p5.js to load...');
                 setTimeout(waitForP5AndInitialize, 100);
-            }}
-        }}
+            }
+        }
         
-        if (document.readyState === 'loading') {{
+        if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', waitForP5AndInitialize);
-        }} else {{
+        } else {
             waitForP5AndInitialize();
-        }}
+        }
         
         // Configure MathJax
-        window.MathJax = {{
-            tex: {{
-                inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-                displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
-            }},
-            svg: {{
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: {
                 fontCache: 'global'
-            }}
-        }};
+            }
+        };
         
         // Add smooth scrolling for anchor links (avoid double-jump jitter)
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {{
-            anchor.addEventListener('click', function (e) {{
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
                 const hash = this.getAttribute('href');
                 if (!hash || hash === '#') return;
                 const target = document.querySelector(hash);
@@ -1236,189 +1001,22 @@ def generate_complete_html(html_content):
                 e.preventDefault();
 
                 // Use nearest block positioning to reduce layout snapping
-                target.scrollIntoView({{
+                target.scrollIntoView({
                     behavior: 'smooth',
                     block: 'nearest',
                     inline: 'nearest'
-                }});
+                });
+            });
+        });
 
-                // Manually update the URL hash without triggering instant jump
-                if (history.pushState) {{
-                    history.pushState(null, '', hash);
-                }} else {{
-                    location.hash = hash;
-                }}
-            }});
-        }});
-        
-        // Copy to clipboard functionality
-        function addCopyButtons() {{
-            document.querySelectorAll('pre code, .code-block code').forEach(block => {{
-                const button = document.createElement('button');
-                button.innerHTML = 'Kopyala';
-                button.style.cssText = `
-                    position: absolute;
-                    top: 8px;
-                    right: 8px;
-                    background: var(--bg-tertiary);
-                    color: var(--text-secondary);
-                    border: 1px solid var(--border-medium);
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 12px;
-                    font-family: var(--font-sans);
-                    opacity: 0;
-                    transition: opacity 0.2s ease;
-                `;
-                
-                const container = block.closest('pre') || block.closest('.code-block');
-                container.style.position = 'relative';
-                container.appendChild(button);
-                
-                container.addEventListener('mouseenter', () => {{
-                    button.style.opacity = '1';
-                }});
-                
-                container.addEventListener('mouseleave', () => {{
-                    button.style.opacity = '0';
-                }});
-                
-                button.addEventListener('click', async () => {{
-                    try {{
-                        await navigator.clipboard.writeText(block.textContent);
-                        button.innerHTML = 'Kopyalandı!';
-                        setTimeout(() => {{
-                            button.innerHTML = 'Kopyala';
-                        }}, 2000);
-                    }} catch (err) {{
-                        console.error('Kopyalama başarısız:', err);
-                    }}
-                }});
-            }});
-        }}
-        
-        // Initialize copy buttons after page load
-        document.addEventListener('DOMContentLoaded', addCopyButtons);
-        
-        // p5.js sketch initialization
-        function initializeP5Sketches() {{
-            console.log('Initializing p5.js sketches...');
-            
-            document.querySelectorAll('.p5js-container').forEach((container, index) => {{
-                const scriptElement = container.querySelector('.p5js-sketch');
-                if (!scriptElement) return;
-                
-                const sketchCode = scriptElement.textContent.trim();
-                const containerId = container.id;
-                const canvasContainer = container.querySelector('.p5js-canvas');
-                
-                if (!canvasContainer) return;
-                
-                try {{
-                    scriptElement.remove();
-                    
-                    // Set up a MutationObserver to catch any canvas that gets created
-                    const observer = new MutationObserver((mutations) => {{
-                        mutations.forEach((mutation) => {{
-                            mutation.addedNodes.forEach((node) => {{
-                                if (node.nodeName === 'CANVAS' || (node.querySelector && node.querySelector('canvas'))) {{
-                                    const canvas = node.nodeName === 'CANVAS' ? node : node.querySelector('canvas');
-                                    if (canvas && !canvasContainer.contains(canvas)) {{
-                                        console.log('Moving canvas to container:', containerId);
-                                        canvasContainer.appendChild(canvas);
-                                        // Remove the canvas from body if it was added there
-                                        if (canvas.parentNode === document.body) {{
-                                            canvas.style.position = 'static';
-                                            canvas.style.left = 'auto';
-                                            canvas.style.top = 'auto';
-                                        }}
-                                    }}
-                                }}
-                            }});
-                        }});
-                    }});
-                    
-                    // Start observing
-                    observer.observe(document.body, {{
-                        childList: true,
-                        subtree: true
-                    }});
-                    
-                    // Execute the p5.js code
-                    setTimeout(() => {{
-                        try {{
-                            eval(sketchCode);
-                            console.log('Successfully executed sketch:', containerId);
-                            
-                            // Stop observing after a short delay
-                            setTimeout(() => observer.disconnect(), 2000);
-                        }} catch (execError) {{
-                            console.error('Error executing sketch:', execError);
-                            observer.disconnect();
-                            throw execError;
-                        }}
-                    }}, 100);
-                    
-                }} catch (error) {{
-                    console.error(`p5.js sketch error in ${{containerId}}:`, error);
-                    canvasContainer.innerHTML = `
-                        <div style="padding: 20px; background: #ffebee; border: 1px solid #f5b2b2; border-radius: 4px; color: #c53030;">
-                            <strong>p5.js Sketch Hatası:</strong><br>
-                            ${{error.message}}
-                        </div>
-                    `;
-                }}
-            }});
-        }}
-        
-        // Poll for image generation updates
-        function pollImageUpdates() {{
-            const pendingImages = document.querySelectorAll('.ai-image-container[data-pending="1"]');
-            
-            pendingImages.forEach(container => {{
-                const promptHash = container.getAttribute('data-prompt-hash');
-                if (promptHash) {{
-                    fetch(`/image_status/${{promptHash}}`)
-                        .then(response => response.json())
-                        .then(data => {{
-                            if (data.status === 'ready' && data.html) {{
-                                container.outerHTML = data.html;
-                            }} else if (data.status === 'failed') {{
-                                container.innerHTML = `
-                                    <div class="error-box">
-                                        <div class="error-title">Görsel Oluşturma Hatası</div>
-                                        <div class="error-message">Görsel oluşturulamadı. Lütfen tekrar deneyin.</div>
-                                        <details class="code-toggle">
-                                            <summary>Prompt</summary>
-                                            <pre class="code-block"><code class="language-text">${{container.querySelector('.code-block code').textContent}}</code></pre>
-                                        </details>
-                                    </div>
-                                `;
-                                container.removeAttribute('data-pending');
-                            }}
-                        }})
-                        .catch(error => {{
-                            console.error('Error polling image status:', error);
-                        }});
-                }}
-            }});
-            
-            // Continue polling if there are still pending images
-            if (pendingImages.length > 0) {{
-                setTimeout(pollImageUpdates, 2000); // Poll every 2 seconds
-            }}
-        }}
-        
-        // Start polling after DOM is loaded
-        document.addEventListener('DOMContentLoaded', () => {{
-            setTimeout(pollImageUpdates, 1000); // Start after 1 second
-        }});
-        
         console.log('📝 Minimal tema yüklendi');
     </script>
 </body>
 </html>'''
+
+    # Normalize escaped braces used earlier for f-strings, then inject content
+    normalized = html_tpl.replace("{{", "{").replace("}}", "}")
+    return normalized.replace("{html_content}", html_content)
 
 # Example usage and test
 if __name__ == "__main__":
