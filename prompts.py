@@ -67,21 +67,10 @@ plt.grid(True)
 plt.show()
 ```
 
-AI Generated Image Example:
-```image
-Generate a textbook style image/illustration of:
-
-[prompt here]
-
-Light beige background color.
-There should not be any text in the image.
-```
-
 COMPONENT USAGE GUIDELINES:
 - ALWAYS put the block contents inside "" (double quotes) in mermaid as it requires it
 - Use the ```python.matplotlib ``` syntax to use the matplotlib graph component
 - Use the ```mermaid ``` syntax to use the mermaid diagram component
-- Use the ```image ``` syntax to prompt an image generator AI to generate an image/illustration
 - Use interactive components strategically to enhance learning
 - Make sure to write `plt.show()` at the end of the code block to show the graph so that it can be rendered inline
 - All components render automatically inline
@@ -98,7 +87,6 @@ CONTENT REQUIREMENTS:
 - Avoid using cringe phrasing or emojis, keep it entertaining and engaging while not being too cringy
 - Make sure that the formats you are using exactly match the templates I provided
 - Explain the graph or diagram before you rite the code for it so the person can understand it easily
-- Make sure you only change the [prompt here] part when generating an image/illustration
-- You can remove the "Light beige background color." part from the image generation prompt if the image should not have a background color
+- Do NOT make the mermaid diagrams long in height, it will break the rendering, make them horizontal if possible
 
 Now answer the question/topic. Write your Turkish response between ```md and ``` tags."""
