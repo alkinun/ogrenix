@@ -26,7 +26,7 @@ def llm_stream(prompt, max_tokens=6000):
     """Stream LLM response using OpenRouter's streaming API"""
     messages = [{"role": "user", "content": prompt}]
     stream = client.chat.completions.create(
-        model="/home/alkin/Desktop/GradyanAkincilari/models/General-TR",
+        model="unsloth/GLM-4-32B-0414-unsloth-bnb-4bit",
         messages=messages,
         stream=True,
         #max_tokens=max_tokens,
@@ -41,7 +41,7 @@ def llm(prompt, max_tokens=6000):
     """Non-streaming version for backwards compatibility"""
     messages = [{"role": "user", "content": prompt}]
     response = client.chat.completions.create(
-        model="/home/alkin/Desktop/GradyanAkincilari/models/General-TR",
+        model="unsloth/GLM-4-32B-0414-unsloth-bnb-4bit",
         messages=messages,
         #max_tokens=max_tokens,
         #temperature=.6,
