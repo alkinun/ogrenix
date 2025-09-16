@@ -17,56 +17,11 @@ client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY")
 )
 
-# Global dictionary to track image generation status
-image_generation_status = defaultdict(dict)
-
-def generate_image(prompt):
-    """Generate image using Google Gemini 2.5 Flash Image Preview via OpenRouter"""
-    try:
-        response = client.chat.completions.create(
-            model="google/gemini-2.5-flash-image-preview",
-            messages=[
-                {
-                    "role": "user", 
-                    "content": prompt
-                }
-            ],
-        )
-        
-        # The response contains the image as base64 data directly in content
-        content = response.choices[0].message.content
-        
-        # The content should be base64 encoded image data
-        if content and len(content) > 100:  # Base64 images are quite long
-            # Remove any potential prefixes or whitespace
-            content = content.strip()
-            
-            # Check if it's already valid base64 (it should be)
-            try:
-                # Test if it's valid base64
-                base64.b64decode(content)
-                return content
-            except Exception:
-                # If not valid base64, it might have some prefix, try to clean it
-                # Look for base64 pattern
-                import re
-                base64_match = re.search(r'[A-Za-z0-9+/]+=*', content)
-                if base64_match and len(base64_match.group(0)) > 100:
-                    return base64_match.group(0)
-            
-        return None
-        
-    except Exception as e:
-        print(f"Error generating image: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
 def llm_stream(prompt, max_tokens=10000):
     """Stream LLM response using OpenRouter's streaming API"""
     messages = [{"role": "user", "content": prompt}]
     stream = client.chat.completions.create(
-        model="anthropic/claude-3.7-sonnet",
+        model="anthropic/claude-opus-4.1@preset/fastest-provider",
         messages=messages,
         stream=True,
         #max_tokens=max_tokens,
@@ -81,7 +36,7 @@ def llm(prompt, max_tokens=10000):
     """Non-streaming version for backwards compatibility"""
     messages = [{"role": "user", "content": prompt}]
     response = client.chat.completions.create(
-        model="anthropic/claude-3.7-sonnet",
+        model="anthropic/claude-opus-4.1@preset/fastest-provider",
         messages=messages,
         #max_tokens=max_tokens,
         #temperature=.6,
@@ -137,15 +92,14 @@ def clean_markdown_response(md_response):
     return md_response.strip()
 
 def generate_stream(question):
-    """Generate streaming response with non-blocking image generation"""
+    """Generate streaming response"""
     def generate():
         try:
             prompt = GENERATE_ANSWER_PROMPT.format(question=question)
             
             accumulated_response = ""
             chunk_count = 0
-            session_id = str(time.time())  # Unique session ID
-            processed_image_blocks = set()  # Track processed image blocks
+            last_html_time = 0.0
             
             # Send initial event
             yield f"data: {json.dumps({'type': 'start', 'message': 'Starting generation...'})}\n\n"
@@ -157,26 +111,26 @@ def generate_stream(question):
                 # Send text chunks for immediate feedback
                 yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk})}\n\n"
                 
-                # Generate HTML every 2 chunks for maximum smoothness
-                if chunk_count % 2 == 0:
+                # Generate HTML on a short time-based cadence to keep UI smooth
+                now = time.time()
+                if now - last_html_time >= 0.12:
                     try:
                         cleaned_md = clean_markdown_response(accumulated_response)
-                        # Use streaming version that doesn't block on image generation
-                        current_html = generate_html_streaming(cleaned_md, session_id, processed_image_blocks)
+                        current_html = generate_html_streaming(cleaned_md)
                         yield f"data: {json.dumps({'type': 'content', 'html': current_html})}\n\n"
                     except Exception as html_error:
                         # Continue with text-only if HTML generation fails
                         pass
+                    finally:
+                        last_html_time = now
                 
-                # Tiny delay to avoid overwhelming the client while keeping it ultra smooth
-                time.sleep(0.0005)
+                # No artificial delay; rely on time-based cadence above
             
-            # Send final complete HTML (non-blocking; keep async image flow)
+            # Send final complete HTML
             if accumulated_response.strip():
                 try:
                     final_md = clean_markdown_response(accumulated_response)
-                    # Use streaming renderer to avoid blocking on image generation
-                    final_html = generate_html_streaming(final_md, session_id, processed_image_blocks)
+                    final_html = generate_html_streaming(final_md)
                     yield f"data: {json.dumps({'type': 'complete', 'html': final_html, 'markdown': final_md})}\n\n"
                 except Exception as e:
                     yield f"data: {json.dumps({'type': 'error', 'error': f'Final HTML generation failed: {str(e)}'})}\n\n"
@@ -192,35 +146,11 @@ def generate_stream(question):
     
     return Response(generate(), mimetype='text/event-stream',
                    headers={
-                       'Cache-Control': 'no-cache',
+                       'Cache-Control': 'no-cache, no-transform',
                        'Connection': 'keep-alive',
+                       'X-Accel-Buffering': 'no',
                        'Access-Control-Allow-Origin': '*'
                    })
-
-@app.route("/image_status/<prompt_hash>", methods=["GET"])
-def get_image_status(prompt_hash):
-    """Get the status of an image generation request"""
-    try:
-        # Check if image is ready in our global status dict
-        if prompt_hash in image_generation_status and 'image_data' in image_generation_status[prompt_hash]:
-            img_base64 = image_generation_status[prompt_hash]['image_data']
-            image_id = f"ai_image_{prompt_hash[:8]}"
-            
-            if img_base64:
-                html = f'''<div class="ai-image-container" id="{image_id}">
-    <img src="data:image/png;base64,{img_base64}" alt="AI Generated Image" class="ai-generated-image"/>
-    <details class="code-toggle">
-        <summary>Prompt'u Göster</summary>
-        <pre class="code-block"><code class="language-text">{image_generation_status[prompt_hash].get('prompt', '')}</code></pre>
-    </details>
-</div>'''
-                return jsonify({"status": "ready", "html": html})
-            else:
-                return jsonify({"status": "failed"})
-        else:
-            return jsonify({"status": "generating"})
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)})
 
 if __name__ == "__main__":
     # Running on port 5002 to avoid conflict with the LLM server
