@@ -345,8 +345,7 @@
         let currentChatId = null;
         let sidebarOpen = false;
         let followScrollEnabled = false;
-        let globalImagePollerId = null;
-        let aggressiveImagePollerId = null;
+        
         // NOTE: We keep things simple. No dynamic library injection —
         // generated HTML already includes mermaid/hljs. We only call
         // their APIs if present.
@@ -947,8 +946,7 @@
                 // Update body content directly - NO RELOAD, NO JITTER!
                 doc.body.innerHTML = newDoc.body.innerHTML;
                 console.log('📝 Updated body content seamlessly');
-                // Kick image polling for any pending AI images in the iframe
-                try { pollImageUpdatesInIframe(iframe); } catch (_) {}
+                
                 
                 // Restore scroll position precisely after DOM update
                 requestAnimationFrame(() => {
@@ -1006,57 +1004,7 @@
             }
         }
         
-        // Poll AI image placeholders inside the iframe and swap them when ready
-        function pollImageUpdatesInIframe(iframe) {
-            try {
-                const win = iframe?.contentWindow; const doc = win?.document;
-                if (!win || !doc) return;
-                const pending = Array.from(doc.querySelectorAll('.ai-image-container[data-pending="1"]'));
-                if (!pending.length) return;
-                pending.forEach((container) => {
-                    try {
-                        const hash = container.getAttribute('data-prompt-hash');
-                        if (!hash) return;
-                        fetch(`/image_status/${hash}`)
-                            .then(r => r.json())
-                            .then(data => {
-                                if (data && data.status === 'ready' && data.html) {
-                                    const temp = doc.createElement('div');
-                                    temp.innerHTML = data.html.trim();
-                                    const el = temp.firstElementChild;
-                                    if (el) container.outerHTML = el.outerHTML;
-                                }
-                            })
-                            .catch(() => {});
-                    } catch (_) {}
-                });
-                // Continue polling while any pending containers remain
-                if (doc.querySelector('.ai-image-container[data-pending="1"]')) {
-                    setTimeout(() => pollImageUpdatesInIframe(iframe), 1500);
-                }
-            } catch (_) {}
-        }
         
-        // Aggressive post-stream poller until all images are swapped or timeout
-        function startAggressiveImagePolling(iframe, timeoutMs = 60000) {
-            try {
-                let startedAt = Date.now();
-                if (aggressiveImagePollerId) clearInterval(aggressiveImagePollerId);
-                aggressiveImagePollerId = setInterval(() => {
-                    try {
-                        pollImageUpdatesInIframe(iframe);
-                        const win = iframe?.contentWindow; const doc = win?.document;
-                        if (!win || !doc) return;
-                        const stillPending = doc.querySelector('.ai-image-container[data-pending="1"]');
-                        const expired = (Date.now() - startedAt) > timeoutMs;
-                        if (!stillPending || expired) {
-                            clearInterval(aggressiveImagePollerId);
-                            aggressiveImagePollerId = null;
-                        }
-                    } catch (_) {}
-                }, 1000);
-            } catch (_) {}
-        }
         
         // Wrapper for backward compatibility - but now with seamless updates!
         function updateIframeContent(newHtml) {
