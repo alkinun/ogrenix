@@ -15,7 +15,7 @@ import os
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key="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"
+    api_key=os.getenv("OPENROUTER_API_KEY"),
 )
 
 def llm_stream(prompt, max_tokens=10000):
