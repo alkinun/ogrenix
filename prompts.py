@@ -64,7 +64,6 @@ plt.title('Sine Function')
 plt.xlabel('x')
 plt.ylabel('sin(x)')
 plt.grid(True)
-plt.show()
 ```
 
 COMPONENT USAGE GUIDELINES:
@@ -72,7 +71,7 @@ COMPONENT USAGE GUIDELINES:
 - Use the ```python.matplotlib ``` syntax to use the matplotlib graph component
 - Use the ```mermaid ``` syntax to use the mermaid diagram component
 - Use interactive components strategically to enhance learning
-- Make sure to write `plt.show()` at the end of the code block to show the graph so that it can be rendered inline
+- Matplotlib graphs render automatically inline (no need for plt.show())
 - All components render automatically inline
 - Use backticks for inline math: `f(x) = y`
 - Choose components that best illustrate your topic, you dont have to pick only one component, you can pick multiple components

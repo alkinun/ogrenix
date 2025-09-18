@@ -10,6 +10,25 @@ import hashlib
 import uuid
 import requests
 import threading
+import time
+import warnings
+from agentic_logger import agentic_logger
+
+# Suppress matplotlib warnings for cleaner console output
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
+warnings.filterwarnings('ignore', category=RuntimeWarning, module='matplotlib')
+warnings.filterwarnings('ignore', category=UserWarning, message='.*pcolormesh.*')
+warnings.filterwarnings('ignore', category=UserWarning, message='.*FigureCanvasAgg.*')
+warnings.filterwarnings('ignore', category=UserWarning, message='.*cell centers.*')
+warnings.filterwarnings('ignore', category=UserWarning, message='.*cell edges.*')
+warnings.filterwarnings('ignore', category=UserWarning, message='.*monotonically.*')
+matplotlib.pyplot.ioff()  # Turn off interactive mode
+plt.rcParams['figure.max_open_warning'] = 0  # Disable figure limit warnings
+
+# Additional matplotlib configuration to prevent warnings
+import matplotlib
+matplotlib.rcParams['axes.formatter.useoffset'] = False
+matplotlib.rcParams['figure.raise_window'] = False
 
 def generate_html(md_str):
     """
@@ -181,7 +200,7 @@ def process_matplotlib_blocks(md_str):
     pattern = r'```python\.matplotlib\n(.*?)\n```'
     
     def clean_matplotlib_code(code):
-        """Remove emoji characters from matplotlib title functions and fix string literals"""
+        """Remove emoji characters from matplotlib title functions, fix string literals, and clean plt.show() calls"""
         import re
         
         def clean_title_text(text):
@@ -189,6 +208,9 @@ def process_matplotlib_blocks(md_str):
             # Also replace newlines with spaces
             text = re.sub(r'\n+', ' ', text)  # Replace newlines with spaces
             return re.sub(r'[^\w\s\(\)\[\]\{\}\+\-\*\/\=\.\,\:\;\|\^\$\\\\°\']+', '', text).strip()
+        
+        # Remove plt.show() calls to prevent warnings in non-interactive mode
+        code = re.sub(r'plt\.show\(\s*\)', '', code, flags=re.MULTILINE)
         
         # Simple approach: fix all multi-line strings in the code first
         lines = code.split('\n')
@@ -243,8 +265,11 @@ def process_matplotlib_blocks(md_str):
         code = match.group(1)
         
         try:
-            # Clean the code to remove emojis from titles
+            # Clean the code to remove emojis from titles and plt.show() calls
             cleaned_code = clean_matplotlib_code(code)
+            
+            # Close any existing figures to prevent memory leaks and warnings
+            plt.close('all')
             
             # Create a new figure with minimal styling
             plt.figure(figsize=(10, 6))
@@ -285,16 +310,23 @@ def process_matplotlib_blocks(md_str):
             exec_globals['math'] = math
             exec_globals['random'] = random
             
-            # Execute the cleaned matplotlib code
-            exec(cleaned_code, exec_globals)
+            # Execute the cleaned matplotlib code with comprehensive warning suppression
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                exec(cleaned_code, exec_globals)
             
-            # Save plot to base64 string
+            # Save plot to base64 string with warning suppression
             img_buffer = io.BytesIO()
-            plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight', 
-                       facecolor='#faf9f7', edgecolor='none')
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight', 
+                           facecolor='#faf9f7', edgecolor='none')
             img_buffer.seek(0)
             img_str = base64.b64encode(img_buffer.getvalue()).decode()
-            plt.close()  # Close the figure to free memory
+            plt.close('all')  # Close all figures to free memory and prevent warnings
+            
+            # Log tool usage
+            agentic_logger.log_tool_usage("matplotlib", code)
             
             # Generate unique ID for the chart
             chart_id = f"chart_{uuid.uuid4().hex[:8]}"
@@ -309,6 +341,12 @@ def process_matplotlib_blocks(md_str):
 </div>'''
             
         except Exception as e:
+            # Ensure cleanup even on error
+            plt.close('all')
+            
+            # Log error
+            agentic_logger.log_error("Matplotlib Execution Error", str(e), f"Code: {code[:100]}...")
+            
             # Return error message if code execution fails
             return f'''<div class="error-box">
     <div class="error-title">Grafik Hatası</div>
@@ -360,8 +398,12 @@ def process_mermaid_blocks(md_str):
     
     def replace_mermaid(match):
         mermaid_code = sanitize_mermaid_code(match.group(1).strip())
+        
         diagram_id = f"mermaid_{uuid.uuid4().hex[:8]}"
         stable_key = hashlib.sha1(mermaid_code.encode('utf-8')).hexdigest()[:16]
+        
+        # Log tool usage
+        agentic_logger.log_tool_usage("mermaid", mermaid_code)
         
         return f'''<div class="diagram-container" id="{diagram_id}">
     <div class="mermaid" data-mermaid-key="{stable_key}">{mermaid_code}</div>
@@ -381,8 +423,12 @@ def process_p5js_blocks(md_str):
     
     def replace_p5js(match):
         p5js_code = match.group(1).strip()
+        
         sketch_id = f"p5js_{uuid.uuid4().hex[:8]}"
         canvas_id = f"canvas_{sketch_id}"
+        
+        # Log tool usage
+        agentic_logger.log_tool_usage("p5js", p5js_code)
         
         return f'''<div class="p5js-container" id="{sketch_id}">
     <div class="p5js">
